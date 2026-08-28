@@ -1,0 +1,11 @@
+{
+  "slug": "client-decision-receipt",
+  "title": "Client Decision Receipt",
+  "territory": "utilities",
+  "user": "A freelancer who needs a clear, client-visible yes/no/change decision on a proposal rather than ambiguous views or an undocumented call.",
+  "smallest_useful_product": "A hosted decision link with Accept, Request changes, or Decline; selected line items/scope are frozen into a dated receipt and emailed to both parties.",
+  "success_measure": "Over 60 days, 60% of proposals sent through the product return a recorded decision and fewer than 10% need a follow-up asking what the client decided.",
+  "artifact_class": "web-with-backend",
+  "monetization": "freemium",
+  "constraints": "Clearly label it as an acknowledgement; retain immutable receipt hashes; support deletion and data export."
+}
