@@ -1,6 +1,9 @@
 node_modules/
 dist/
+target/
+data/
 .env
+*.sqlite*
 *.log
 graphify-out/
 .DS_Store
