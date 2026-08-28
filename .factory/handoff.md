@@ -1,5 +1,26 @@
 # Handoff — Client Decision Receipt
 
+## Independent verification outcome (2026-08-28): **FAIL**
+
+Candidate `75019d3cb52948843ff2f2db890cf01a2c13342b` was independently checked
+against https://client-decision-receipt.sociobot.in from a clean checkout. Do
+not release or promote it. The detailed evidence is in
+[`verification.md`](verification.md).
+
+- **P0:** live capability links alternate between `404` and `200` on repeated
+  requests to the same token, proving per-instance database/HMAC-secret state
+  behind the load balancer.
+- **P1:** `.factory/claims.json` is missing; mandatory claim tests could not be
+  run. The home page has no one-click sample-data demo, a separately mandated
+  FAIL condition.
+- **P1:** default factory runtime has no configured SMTP, so the brief-required
+  two-party emails remain `queued`; concurrent final decisions return `500` for
+  the losing request instead of `409`.
+
+The prior builder verification below is retained as implementation context, but
+it is superseded by this release decision and does not cover the live
+multi-instance persistence failure.
+
 ## Shipped
 
 - Rust/Axum service with SQLite persistence, structured logs, graceful shutdown, `/health` build identity, secure headers, compression, and static frontend serving on `PORT` (default 8080).
