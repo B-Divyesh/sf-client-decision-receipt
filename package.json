@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "test": "npm run test:unit && cargo test",
+    "test": "npm run test:unit && cargo test && npm run test:e2e",
     "test:unit": "vitest run",
+    "test:e2e": "npm run build && playwright test",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

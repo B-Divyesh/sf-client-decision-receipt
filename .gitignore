@@ -6,4 +6,6 @@ data/
 *.sqlite*
 *.log
 graphify-out/
+test-results/
+playwright-report/
 .DS_Store

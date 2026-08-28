@@ -16,7 +16,8 @@
     {#if proposal.decision}<div><dt>Recorded</dt><dd>{new Date(proposal.decision.decidedAt).toLocaleString()}</dd></div><div><dt>Respondent</dt><dd>{proposal.decision.respondentName}</dd></div>{/if}
   </dl>
   {#if proposal.message}<p class="message">{proposal.message}</p>{/if}
-  <div class="table-wrap">
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <div class="table-wrap" role="region" aria-label="Frozen scope table" tabindex="0">
     <table>
       <caption>Frozen scope and fees</caption>
       <thead><tr><th>Scope item</th><th>Qty</th><th>Unit</th><th>Amount</th></tr></thead>
