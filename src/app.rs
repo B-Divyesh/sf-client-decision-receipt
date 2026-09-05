@@ -51,9 +51,44 @@ pub async fn run() -> anyhow::Result<()> {
     let data_dir = PathBuf::from(std::env::var("DATA_DIR").unwrap_or_else(|_| "/data".into()));
     fs::create_dir_all(&data_dir).await?;
     let (secret, secret_source) = load_secret(&data_dir).await?;
-    let db_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| format!("sqlite://{}", data_dir.join("receipts.sqlite").display()));
-    let pool = db::connect(&db_url).await?;
+    let configured_database = std::env::var("DATABASE_URL").ok();
+    let (db_url, database_file, marker_exists) = if let Some(url) = configured_database.as_ref() {
+        (url.clone(), "supplied DATABASE_URL".to_string(), true)
+    } else {
+        let marker = data_dir.join("database-path");
+        let filename = fs::read_to_string(&marker)
+            .await
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty() && !value.contains('/') && !value.contains('\\'))
+            .unwrap_or_else(|| "receipts.sqlite".into());
+        (
+            format!("sqlite://{}", data_dir.join(&filename).display()),
+            filename,
+            marker.exists(),
+        )
+    };
+    let (pool, database_source) = match db::connect(&db_url).await {
+        Ok(pool) => {
+            if configured_database.is_none() && !marker_exists {
+                fs::write(data_dir.join("database-path"), &database_file).await?;
+            }
+            (pool, "persisted")
+        }
+        Err(error)
+            if configured_database.is_none() && !marker_exists && database_locked(&error) =>
+        {
+            // A failed revision can leave a temporary Azure Files lock on the
+            // first database filename. Preserve that file untouched and pin a
+            // fresh durable filename for this otherwise empty first boot.
+            let recovery_file = "receipts-v2.sqlite";
+            tracing::warn!("initial database file is locked; using a new durable file");
+            fs::write(data_dir.join("database-path"), recovery_file).await?;
+            let recovery_url = format!("sqlite://{}", data_dir.join(recovery_file).display());
+            (db::connect(&recovery_url).await?, "recovered")
+        }
+        Err(error) => return Err(error),
+    };
     let mailer = Mailer::from_env()?;
     let mail_source = if mailer.is_some() {
         "supplied SMTP"
@@ -80,6 +115,7 @@ pub async fn run() -> anyhow::Result<()> {
         port,
         build_sha = env!("BUILD_SHA"),
         instance_secret = secret_source,
+        database = database_source,
         mail_delivery = mail_source,
         "service starting"
     );
@@ -91,6 +127,13 @@ pub async fn run() -> anyhow::Result<()> {
     .with_graceful_shutdown(shutdown())
     .await?;
     Ok(())
+}
+
+fn database_locked(error: &anyhow::Error) -> bool {
+    let message = format!("{error:#}");
+    message.contains("database is locked")
+        || message.contains("database is busy")
+        || message.contains("(code: 5)")
 }
 
 pub fn router(state: AppState) -> Router {
