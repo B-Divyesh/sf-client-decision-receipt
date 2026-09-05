@@ -22,7 +22,7 @@
 </script>
 
 <section class="narrow client-page">
-  {#if loading}<div class="state-page" aria-live="polite"><div class="pressed-loader" aria-hidden="true"></div><h1>Opening the field record…</h1><p>Checking the private proposal link.</p></div>
+  {#if loading}<div class="state-page" aria-live="polite"><div class="pressed-loader" aria-hidden="true"></div><h1>Opening the proposal…</h1><p>Checking the private proposal link.</p></div>
   {:else if error && !proposal}<div class="state-page"><p class="eyebrow">Link unavailable</p><h1>This proposal could not be opened.</h1><p class="error" role="alert">{error}</p><button class="button" on:click={load}>Try again</button></div>
   {:else if proposal}
     <div class="client-title"><p class="eyebrow">Prepared for {proposal.clientName}</p><h1>{proposal.decision ? 'Decision recorded.' : 'Your decision is requested.'}</h1><p>{proposal.decision ? 'This frozen receipt is the shared record for both parties.' : `${proposal.freelancerName} has asked you to review this exact scope.`}</p></div>

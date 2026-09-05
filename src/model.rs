@@ -80,6 +80,14 @@ pub struct ManagedProposal {
     pub delivery: Vec<Delivery>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DemoWorkspace {
+    pub id: String,
+    pub expires_at: String,
+    pub proposal: Proposal,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Delivery {

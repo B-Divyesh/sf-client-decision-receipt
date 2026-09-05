@@ -1,8 +1,6 @@
 const SLUG = 'client-decision-receipt';
 const KEY = `sb_license:${SLUG}`;
 const CACHE_KEY = `${KEY}:verdict`;
-export const checkoutUrl = `https://api.sociobot.in/api/v1/products/${SLUG}/checkout`;
-
 export type LicenseState = { unlocked: boolean; checking: boolean; notice: string };
 
 export async function initializeLicense(): Promise<LicenseState> {

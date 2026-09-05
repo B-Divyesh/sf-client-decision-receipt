@@ -42,6 +42,7 @@ UI transitions are 180–240 ms and animate opacity/transform only: a pressed st
 
 - `assets/src/herbarium-receipt.png`: generated specifically for this product on 2026-08-28 using the factory Azure image deployment (`factory-image`). Original generated imagery; no third-party asset or brand is represented.
 - Runtime derivatives: `frontend/public/herbarium-receipt-640.webp` and `herbarium-receipt-960.webp`, cropped only and encoded locally. The 640 px hero is the mobile source and must remain under 300 KB.
+- `frontend/public/og-receipt.jpg` is a local 1200×630 crop of the same original illustration for social previews; it contains no text and is 100 KB.
 - Hand-authored UI marks (leaf sprig, check, change, decline, seal) are inline SVG with `currentColor`; no icon library.
 
 ### Prompt sheet

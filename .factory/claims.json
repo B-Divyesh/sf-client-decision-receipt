@@ -1,0 +1,37 @@
+[
+  {
+    "id": "demo-sandbox",
+    "claim": "Try the sample without changing real proposal records; each sample expires within 24 hours.",
+    "where": "landing action and demo banner",
+    "test": "npm run test:e2e -- --grep @claim:demo-sandbox",
+    "sandbox": "create a separate real record, submit and reset the /demo sample, then verify the real record remains undecided"
+  },
+  {
+    "id": "frozen-receipt",
+    "claim": "A final decision keeps the shown scope and adds a SHA-256 receipt seal.",
+    "where": "sample receipt and client receipt",
+    "test": "npm run test:e2e -- --grep @claim:frozen-receipt",
+    "sandbox": "submit a sample changes request and assert its original scope, decision, and 64-character receipt seal remain visible"
+  },
+  {
+    "id": "no-tracking",
+    "claim": "The product does not use tracking pixels or view counters.",
+    "where": "landing facts, process explanation, privacy page",
+    "test": "npm run test:e2e -- --grep @claim:no-tracking",
+    "sandbox": "record browser requests while loading and resetting /demo; assert every HTTP request stays on the product origin"
+  },
+  {
+    "id": "offline-reload",
+    "claim": "The sample remains available offline after its first visit.",
+    "where": "README",
+    "test": "npm run test:e2e -- --grep @claim:offline-reload",
+    "sandbox": "fresh browser context visits /demo, waits for the worker, switches offline, and reloads the sample page"
+  },
+  {
+    "id": "free-core",
+    "claim": "Create decisions, export receipt JSON, and delete records without a Pro license.",
+    "where": "landing facts and pricing section",
+    "test": "npm run test:e2e -- --grep @claim:free-core",
+    "sandbox": "fresh browser creates and decides a normal proposal, exports its JSON receipt, then permanently deletes it without any license"
+  }
+]

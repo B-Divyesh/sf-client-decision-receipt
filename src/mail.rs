@@ -35,7 +35,7 @@ impl Mailer {
     }
 
     pub async fn flush_proposal(&self, pool: &SqlitePool, proposal_id: &str) {
-        let rows = match sqlx::query("SELECT id, recipient, subject, body FROM deliveries WHERE proposal_id = ? AND status IN ('queued', 'retry_needed')").bind(proposal_id).fetch_all(pool).await {
+        let rows = match sqlx::query("SELECT id, recipient, subject, body FROM deliveries WHERE proposal_id = ? AND status IN ('queued', 'retry_needed', 'sender_not_configured')").bind(proposal_id).fetch_all(pool).await {
             Ok(rows) => rows,
             Err(error) => { tracing::error!(?error, "failed to read delivery queue"); return; }
         };
@@ -81,7 +81,7 @@ impl Mailer {
     }
 
     pub async fn flush_pending(&self, pool: &SqlitePool) {
-        let rows = match sqlx::query("SELECT DISTINCT proposal_id FROM deliveries WHERE status IN ('queued', 'retry_needed')").fetch_all(pool).await {
+        let rows = match sqlx::query("SELECT DISTINCT proposal_id FROM deliveries WHERE status IN ('queued', 'retry_needed', 'sender_not_configured')").fetch_all(pool).await {
             Ok(rows) => rows,
             Err(error) => { tracing::error!(?error, "failed to scan delivery queue"); return; }
         };

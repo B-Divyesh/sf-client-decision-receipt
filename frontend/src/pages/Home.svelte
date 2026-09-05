@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../lib';
-  import { checkoutUrl, initializeLicense, restoreLicense, type LicenseState } from '../license';
+  import { initializeLicense, restoreLicense, type LicenseState } from '../license';
 
   type DraftItem = { label: string; description: string; quantity: number; price: number };
   type Created = { id: string; clientPath: string; managePath: string };
@@ -56,25 +56,26 @@
 
 <section class="hero">
   <div class="hero-copy">
-    <p class="eyebrow">A field record for client work</p>
-    <h1>Turn “looks good” into a decision you can keep.</h1>
-    <p class="lead">Send one quiet link. Your client accepts, requests changes, or declines. The exact scope is frozen into a dated, verifiable receipt—without open tracking.</p>
-    <a class="button" href="#make">Make a decision link <span aria-hidden="true">↓</span></a>
-    <p class="micro">Free for occasional proposals · no account required</p>
+    <p class="eyebrow">Client decisions for freelancers and studios</p>
+    <h1>Get a clear client decision.</h1>
+    <p class="lead">For freelancers and small studios: send a private link and keep the accepted, changed, or declined scope as a dated receipt.</p>
+    <div class="hero-actions"><a class="button" href="/demo">Try it with sample data</a><a class="text-link" href="#make">Make a decision link</a></div>
+    <p class="micro">The sample opens a ready request. No tracking pixels.</p>
+    <ul class="plain-facts"><li>Free for occasional proposals</li><li>No open tracking or view counts</li><li>It is an acknowledgement, not an e-signature</li></ul>
   </div>
   <figure class="hero-plate">
     <picture><source media="(max-width: 640px)" srcset="/herbarium-receipt-640.webp" /><img src="/herbarium-receipt-960.webp" width="960" height="640" alt="A pressed maidenhair fern, archival card, and blank catalogue tag on herbarium paper" decoding="async" fetchpriority="high" /></picture>
-    <figcaption><span>Plate 01</span> Scope, pressed into the record.</figcaption>
+    <figcaption><span>Decision record</span> A proposal scope kept as a receipt.</figcaption>
   </figure>
 </section>
 
 <section class="process" aria-labelledby="process-heading">
-  <div><p class="eyebrow">The useful signal</p><h2 id="process-heading">A decision, not a view count.</h2></div>
-  <ol><li><span>01</span><strong>List the agreed scope</strong><p>Add deliverables and fees. We freeze exactly what the client sees.</p></li><li><span>02</span><strong>Send the private link</strong><p>No login, surveillance pixel, or signature theatre.</p></li><li><span>03</span><strong>Keep the receipt</strong><p>Both sides see the decision, timestamp, and SHA-256 seal.</p></li></ol>
+  <div><p class="eyebrow">How it works</p><h2 id="process-heading">Record the client’s next step.</h2></div>
+  <ol><li><span>01</span><strong>List the agreed scope</strong><p>Add deliverables and fees. The receipt keeps exactly what the client sees.</p></li><li><span>02</span><strong>Send the private link</strong><p>Clients choose Accept, Request changes, or Decline. Their private link opens directly.</p></li><li><span>03</span><strong>Keep the receipt</strong><p>Both sides can see the decision, timestamp, and SHA-256 seal.</p></li></ol>
 </section>
 
 <section id="make" class="maker" aria-labelledby="maker-heading">
-  <div class="section-intro"><p class="eyebrow">New specimen</p><h2 id="maker-heading">Prepare a decision request</h2><p>The decision link is for your client. The separate management link is the only key to exports and deletion.</p></div>
+  <div class="section-intro"><p class="eyebrow">New decision request</p><h2 id="maker-heading">Create a decision request</h2><p>The decision link is for your client. The separate management link controls exports and deletion.</p></div>
   {#if created}
     <div class="success-sheet" aria-live="polite">
       <span class="specimen-number">{created.id}</span>
@@ -99,11 +100,11 @@
 </section>
 
 <section id="archive" class="archive" aria-labelledby="archive-heading">
-  <div class="section-intro"><p class="eyebrow">This browser</p><h2 id="archive-heading">Your private archive</h2><p>Management links are stored only in this browser. Export a copy for safekeeping.</p></div>
-  {#if archive.length}<ul>{#each archive as entry}<li><div><strong>{entry.title}</strong><small>{entry.id} · {new Date(entry.createdAt).toLocaleDateString()}</small></div><a class="button secondary" href={entry.managePath}>Open record</a></li>{/each}</ul>{#if license.unlocked}<p class="archive-export"><button class="button secondary" type="button" on:click={exportArchive}>Export archive index</button></p>{/if}{:else}<div class="empty"><span aria-hidden="true">⌁</span><p><strong>No pressed specimens yet.</strong><br />Create your first decision link above; its management key will appear here.</p></div>{/if}
+  <div class="section-intro"><p class="eyebrow">Stored in this browser</p><h2 id="archive-heading">Your saved management links</h2><p>Management links are stored only in this browser. Export a copy for safekeeping.</p></div>
+  {#if archive.length}<ul>{#each archive as entry}<li><div><strong>{entry.title}</strong><small>{entry.id} · {new Date(entry.createdAt).toLocaleDateString()}</small></div><a class="button secondary" href={entry.managePath}>Open record</a></li>{/each}</ul>{#if license.unlocked}<p class="archive-export"><button class="button secondary" type="button" on:click={exportArchive}>Export archive index</button></p>{/if}{:else}<div class="empty"><span aria-hidden="true">⌁</span><p><strong>No saved management links yet.</strong><br />Create your first decision link above. Its management link will appear here.</p></div>{/if}
 </section>
 
 <section id="pricing" class="pricing" aria-labelledby="pricing-heading">
-  <div><p class="eyebrow">Simple field kit</p><h2 id="pricing-heading">Free to decide. Pro to make it yours.</h2><p>Core decisions, receipt seals, JSON/CSV export, and deletion stay free. Always.</p></div>
-  <div class="price-sheet"><p class="price"><span>$29</span> one time</p><h3>Independent Pro</h3><ul><li>Export your browser archive index in one click</li><li>Priority product support</li><li>Future studio-branding controls when released</li></ul>{#if license.unlocked}<p class="license-good">✓ Pro is unlocked on this device.</p><button class="button secondary" type="button" on:click={exportArchive}>Export archive index</button><p><a href="mailto:priority@sociobot.in">Contact priority support</a></p>{:else}<a class="button" href={checkoutUrl}>Buy Pro once</a>{/if}<p class="fine">Sociobot/Dodo is merchant of record. Refunds are handled there and revoke the license.</p><details><summary>Have a license? Restore purchase</summary><label for="license">License token</label><div class="restore"><input id="license" bind:value={licenseInput} autocomplete="off" /><button class="button secondary" type="button" disabled={license.checking} on:click={restore}>Verify</button></div>{#if license.notice}<p class="notice" aria-live="polite">{license.notice} <a href={checkoutUrl}>Get a license</a></p>{/if}</details></div>
+  <div><p class="eyebrow">Pricing</p><h2 id="pricing-heading">Choose free or Pro.</h2><p>Core decisions, receipt seals, JSON/CSV export, and deletion stay free.</p></div>
+  <div class="price-sheet"><p class="price"><span>$29</span> one time</p><h3>Independent Pro</h3><ul><li>Export your browser archive index in one click</li><li>Priority product support</li><li>Future studio-branding controls when released</li></ul>{#if license.unlocked}<p class="license-good">✓ Pro is unlocked on this device.</p><button class="button secondary" type="button" on:click={exportArchive}>Export archive index</button><p><a href="mailto:priority@sociobot.in">Contact priority support</a></p>{:else}<button class="button" type="button" disabled>Pro purchase is being registered</button><p class="notice">The $29 one-time checkout is not available yet. Existing licenses can still be restored below.</p>{/if}<p class="fine">Sociobot/Dodo is merchant of record. Refunds are handled there and revoke the license.</p><details><summary>Have a license? Restore purchase</summary><label for="license">License token</label><div class="restore"><input id="license" bind:value={licenseInput} autocomplete="off" /><button class="button secondary" type="button" disabled={license.checking} on:click={restore}>Verify</button></div>{#if license.notice}<p class="notice" aria-live="polite">{license.notice}</p>{/if}</details></div>
 </section>

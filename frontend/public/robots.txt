@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /p/
 Disallow: /m/
+Sitemap: https://client-decision-receipt.sociobot.in/sitemap.xml

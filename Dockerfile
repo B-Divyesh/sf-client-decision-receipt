@@ -4,7 +4,7 @@ COPY package.json package-lock.json vite.config.ts ./
 COPY frontend ./frontend
 RUN npm ci && npm run build
 
-FROM rust:1.98-bookworm AS server
+FROM rust:1-slim AS server
 ARG BUILD_SHA=dev
 WORKDIR /src
 COPY Cargo.toml Cargo.lock build.rs ./

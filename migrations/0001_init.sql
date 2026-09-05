@@ -40,6 +40,21 @@ CREATE TABLE IF NOT EXISTS receipt_tombstones (
   deleted_at TEXT NOT NULL
 );
 
+-- Demo workspaces deliberately live outside the proposal/outbox tables. They
+-- are capability-scoped, expire after 24 hours, and never create mail jobs.
+CREATE TABLE IF NOT EXISTS demo_sessions (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  decision_kind TEXT,
+  respondent_name TEXT,
+  respondent_email TEXT,
+  decision_note TEXT,
+  decided_at TEXT,
+  receipt_hash TEXT
+);
+
 CREATE INDEX IF NOT EXISTS proposals_client_token ON proposals(client_token_hash);
 CREATE INDEX IF NOT EXISTS proposals_manage_token ON proposals(manage_token_hash);
 CREATE INDEX IF NOT EXISTS deliveries_proposal ON deliveries(proposal_id);
+CREATE INDEX IF NOT EXISTS demo_sessions_expires ON demo_sessions(expires_at);

@@ -9,8 +9,8 @@
     <span>Client Decision<br /><small>Receipt</small></span>
   </a>
   <nav aria-label="Primary navigation">
+    <a href="/demo">Try sample</a>
     <a href="/#make">Make a receipt</a>
-    <a href="/#archive">Your archive</a>
-    <a href="/#pricing">Pricing</a>
+    <a href="/privacy">Privacy</a>
   </nav>
 </header>
