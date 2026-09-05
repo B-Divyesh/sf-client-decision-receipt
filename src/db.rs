@@ -24,10 +24,36 @@ pub async fn connect(url: &str) -> anyhow::Result<SqlitePool> {
         .max_connections(10)
         .connect_with(options)
         .await?;
-    sqlx::raw_sql(include_str!("../migrations/0001_init.sql"))
-        .execute(&pool)
-        .await?;
-    Ok(pool)
+    for attempt in 1..=12 {
+        match sqlx::raw_sql(include_str!("../migrations/0001_init.sql"))
+            .execute(&pool)
+            .await
+        {
+            Ok(_) => return Ok(pool),
+            Err(error) if database_locked(&error) && attempt < 12 => {
+                tracing::warn!(
+                    attempt,
+                    "database is busy during startup; retrying migration"
+                );
+                tokio::time::sleep(StdDuration::from_secs(1)).await;
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    unreachable!("startup retry loop always returns")
+}
+
+fn database_locked(error: &sqlx::Error) -> bool {
+    match error {
+        sqlx::Error::Database(database) => {
+            database
+                .code()
+                .is_some_and(|code| code == "5" || code == "6")
+                || database.message().contains("database is locked")
+                || database.message().contains("database is busy")
+        }
+        _ => false,
+    }
 }
 
 pub async fn create_demo(pool: &SqlitePool, id: &str) -> Result<DemoWorkspace, AppError> {
@@ -234,14 +260,8 @@ async fn begin_immediate(
 }
 
 fn write_conflict(error: sqlx::Error) -> AppError {
-    if let sqlx::Error::Database(database) = &error {
-        let code = database.code();
-        if code.is_some_and(|code| code == "5" || code == "6")
-            || database.message().contains("database is locked")
-            || database.message().contains("database is busy")
-        {
-            return AppError::Conflict;
-        }
+    if database_locked(&error) {
+        return AppError::Conflict;
     }
     error.into()
 }
