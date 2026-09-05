@@ -8,10 +8,7 @@ use crate::{
 use chrono::{Duration, SecondsFormat, Utc};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use sqlx::{
-    sqlite::{SqliteConnectOptions, SqliteJournalMode},
-    Row, SqliteConnection, SqlitePool,
-};
+use sqlx::{sqlite::SqliteConnectOptions, Row, SqliteConnection, SqlitePool};
 use std::time::Duration as StdDuration;
 
 pub async fn connect(url: &str) -> anyhow::Result<SqlitePool> {
@@ -19,10 +16,6 @@ pub async fn connect(url: &str) -> anyhow::Result<SqlitePool> {
         .parse::<SqliteConnectOptions>()?
         .create_if_missing(true)
         .foreign_keys(true)
-        // SQLx defaults to WAL before migrations run. Azure Files is a network
-        // mount, so select the single-writer rollback journal at connection
-        // time rather than trying to change it after opening the database.
-        .journal_mode(SqliteJournalMode::Delete)
         // A second final decision waits for the first short write transaction,
         // then reads the recorded decision and returns 409. Without this,
         // SQLite can surface a transient lock as a misleading 500.

@@ -1,6 +1,3 @@
--- Azure Files is a network mount. With this product's enforced single writer,
--- the rollback journal is safer than WAL during a revision handoff.
-PRAGMA journal_mode = DELETE;
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS proposals (
