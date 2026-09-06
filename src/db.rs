@@ -19,7 +19,7 @@ pub async fn connect(url: &str) -> anyhow::Result<SqlitePool> {
         // A second final decision waits for the first short write transaction,
         // then reads the recorded decision and returns 409. Without this,
         // SQLite can surface a transient lock as a misleading 500.
-        .busy_timeout(StdDuration::from_secs(5));
+        .busy_timeout(StdDuration::from_secs(1));
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(10)
         .connect_with(options)
@@ -37,7 +37,10 @@ pub async fn connect(url: &str) -> anyhow::Result<SqlitePool> {
                 );
                 tokio::time::sleep(StdDuration::from_secs(1)).await;
             }
-            Err(error) => return Err(error.into()),
+            Err(error) => {
+                pool.close().await;
+                return Err(error.into());
+            }
         }
     }
     unreachable!("startup retry loop always returns")
