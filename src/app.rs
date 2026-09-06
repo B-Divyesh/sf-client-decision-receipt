@@ -190,8 +190,10 @@ pub fn router(state: AppState) -> Router {
         .merge(reads)
         .merge(writes)
         .fallback(api_not_found)
-        .layer(middleware::from_fn(useful_retry_after))
+        // This layer must be outside both governor layers so a limited read
+        // and a limited write each receive a usable Retry-After value.
         .layer(GovernorLayer::new(read_config))
+        .layer(middleware::from_fn(useful_retry_after))
         .with_state(state.clone());
     Router::new()
         .route("/health", get(health))
