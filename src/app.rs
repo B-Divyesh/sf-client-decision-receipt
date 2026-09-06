@@ -25,7 +25,7 @@ use std::{
     path::{Path as FilePath, PathBuf},
     sync::Arc,
 };
-use tokio::{fs, net::TcpListener};
+use tokio::{fs, net::TcpListener, sync::Mutex};
 use tower_governor::{
     governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
 };
@@ -37,6 +37,53 @@ pub struct AppState {
     secret: Arc<Vec<u8>>,
     mailer: Option<Mailer>,
     dist: Arc<PathBuf>,
+    durable: Option<Arc<DurableDatabase>>,
+}
+
+/// Azure Files provides durable shared storage but its byte-range locks are
+/// not compatible with SQLite's live locking protocol. The running database
+/// is therefore local to the one allowed replica; this object atomically
+/// snapshots a valid SQLite database to /data after every real-data write.
+/// On boot, the snapshot is restored before the app accepts traffic.
+struct DurableDatabase {
+    snapshot: PathBuf,
+    transfer: PathBuf,
+    staged: PathBuf,
+    lock: Mutex<()>,
+}
+
+impl DurableDatabase {
+    async fn open(data_dir: &FilePath) -> anyhow::Result<(SqlitePool, Arc<Self>)> {
+        let unique = format!("client-decision-receipt-{}", std::process::id());
+        let working = std::env::temp_dir().join(format!("{unique}.sqlite"));
+        let snapshot = data_dir.join("receipts-durable.sqlite");
+        if fs::try_exists(&snapshot).await? {
+            fs::copy(&snapshot, &working).await?;
+        }
+        let durable = Arc::new(Self {
+            snapshot,
+            transfer: data_dir.join("receipts-durable.next.sqlite"),
+            staged: std::env::temp_dir().join(format!("{unique}.snapshot.sqlite")),
+            lock: Mutex::new(()),
+        });
+        let url = format!("sqlite://{}", working.display());
+        let pool = db::connect(&url).await?;
+        durable.checkpoint(&pool).await?;
+        Ok((pool, durable))
+    }
+
+    async fn checkpoint(&self, pool: &SqlitePool) -> anyhow::Result<()> {
+        let _guard = self.lock.lock().await;
+        let _ = fs::remove_file(&self.staged).await;
+        let target = self.staged.to_string_lossy().replace('\'', "''");
+        sqlx::raw_sql(&format!("VACUUM INTO '{target}'"))
+            .execute(pool)
+            .await?;
+        fs::copy(&self.staged, &self.transfer).await?;
+        fs::rename(&self.transfer, &self.snapshot).await?;
+        let _ = fs::remove_file(&self.staged).await;
+        Ok(())
+    }
 }
 
 pub async fn run() -> anyhow::Result<()> {
@@ -52,64 +99,11 @@ pub async fn run() -> anyhow::Result<()> {
     fs::create_dir_all(&data_dir).await?;
     let (secret, secret_source) = load_secret(&data_dir).await?;
     let configured_database = std::env::var("DATABASE_URL").ok();
-    let (db_url, database_file, marker_is_verified) = if let Some(url) =
-        configured_database.as_ref()
-    {
-        (url.clone(), "supplied DATABASE_URL".to_string(), true)
+    let (pool, durable, database_source) = if let Some(url) = configured_database {
+        (db::connect(&url).await?, None, "supplied DATABASE_URL")
     } else {
-        let marker = data_dir.join("database-path");
-        let marker_value = fs::read_to_string(&marker)
-            .await
-            .ok()
-            .map(|value| value.trim().to_string());
-        // Marker files written by current versions use `ready:`. A legacy
-        // filename can exist after an interrupted first boot, because earlier
-        // versions wrote the marker before SQLite had opened successfully.
-        let (filename, verified) = marker_value
-            .as_deref()
-            .and_then(|value| value.strip_prefix("ready:"))
-            .map(|value| (value.to_string(), true))
-            .or_else(|| marker_value.map(|value| (value, false)))
-            .filter(|(value, _)| !value.is_empty() && !value.contains('/') && !value.contains('\\'))
-            .unwrap_or_else(|| ("receipts.sqlite".into(), false));
-        (
-            format!("sqlite://{}", data_dir.join(&filename).display()),
-            filename,
-            verified,
-        )
-    };
-    let (pool, database_source) = match db::connect(&db_url).await {
-        Ok(pool) => {
-            if configured_database.is_none() && !marker_is_verified {
-                fs::write(
-                    data_dir.join("database-path"),
-                    format!("ready:{database_file}"),
-                )
-                .await?;
-            }
-            (pool, "persisted")
-        }
-        Err(error)
-            if configured_database.is_none() && !marker_is_verified && database_locked(&error) =>
-        {
-            // A failed revision can leave a temporary Azure Files lock on an
-            // initial filename. This branch is only available before a
-            // successful database choice is marked ready, so it never moves
-            // an established tenant to a different database.
-            let recovery_file = "receipts-v3.sqlite";
-            tracing::warn!(
-                "unverified initial database file is locked; trying a fresh durable file"
-            );
-            let recovery_url = format!("sqlite://{}", data_dir.join(recovery_file).display());
-            let recovery_pool = db::connect(&recovery_url).await?;
-            fs::write(
-                data_dir.join("database-path"),
-                format!("ready:{recovery_file}"),
-            )
-            .await?;
-            (recovery_pool, "recovered")
-        }
-        Err(error) => return Err(error),
+        let (pool, durable) = DurableDatabase::open(&data_dir).await?;
+        (pool, Some(durable), "durable /data snapshot")
     };
     let mailer = Mailer::from_env()?;
     let mail_source = if mailer.is_some() {
@@ -124,11 +118,13 @@ pub async fn run() -> anyhow::Result<()> {
         dist: Arc::new(PathBuf::from(
             std::env::var("DIST_DIR").unwrap_or_else(|_| "dist".into()),
         )),
+        durable,
     };
     if let Some(mailer) = state.mailer.clone() {
-        let pending_pool = state.pool.clone();
+        let pending_state = state.clone();
         tokio::spawn(async move {
-            mailer.flush_pending(&pending_pool).await;
+            mailer.flush_pending(&pending_state.pool).await;
+            let _ = persist(&pending_state).await;
         });
     }
     let app = router(state);
@@ -149,13 +145,6 @@ pub async fn run() -> anyhow::Result<()> {
     .with_graceful_shutdown(shutdown())
     .await?;
     Ok(())
-}
-
-fn database_locked(error: &anyhow::Error) -> bool {
-    let message = format!("{error:#}");
-    message.contains("database is locked")
-        || message.contains("database is busy")
-        || message.contains("(code: 5)")
 }
 
 pub fn router(state: AppState) -> Router {
@@ -329,6 +318,7 @@ async fn create_proposal(
         &input,
     )
     .await?;
+    persist(&state).await?;
     Ok((
         StatusCode::CREATED,
         Json(CreatedProposal {
@@ -364,12 +354,14 @@ async fn submit_decision(
     )
     .await?;
     if let Some(mailer) = state.mailer.clone() {
-        let pool = state.pool.clone();
+        let pending_state = state.clone();
         let id = proposal.id.clone();
         tokio::spawn(async move {
-            mailer.flush_proposal(&pool, &id).await;
+            mailer.flush_proposal(&pending_state.pool, &id).await;
+            let _ = persist(&pending_state).await;
         });
     }
+    persist(&state).await?;
     Ok((StatusCode::CREATED, Json(proposal)))
 }
 
@@ -482,7 +474,15 @@ async fn delete_proposal(
         ));
     }
     db::delete_by_manage(&state.pool, &token_hash(&state.secret, &token)).await?;
+    persist(&state).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn persist(state: &AppState) -> Result<(), AppError> {
+    if let Some(durable) = &state.durable {
+        durable.checkpoint(&state.pool).await?;
+    }
+    Ok(())
 }
 
 fn download(body: Vec<u8>, content_type: &'static str, filename: &str) -> Response {
@@ -618,6 +618,7 @@ mod tests {
             secret: Arc::new(vec![7; 32]),
             mailer: None,
             dist: Arc::new(PathBuf::from("missing-dist")),
+            durable: None,
         })
     }
 
@@ -820,12 +821,14 @@ mod tests {
             secret: Arc::new(first_secret),
             mailer: None,
             dist: Arc::new(PathBuf::from("missing-dist")),
+            durable: None,
         });
         let second = router(AppState {
             pool: second_pool,
             secret: Arc::new(second_secret),
             mailer: None,
             dist: Arc::new(PathBuf::from("missing-dist")),
+            durable: None,
         });
         let input = json!({"title":"Shared mount receipt","freelancerName":"Fern Studio","freelancerEmail":"hello@fern.test","clientName":"Aster Client","clientEmail":"aster@example.test","message":"Scope below","currency":"USD","items":[{"label":"Discovery","description":"Workshop","quantity":1,"unitAmountCents":50000}]});
         let created = first
@@ -857,5 +860,35 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(read.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn durable_snapshot_restores_private_links_after_restart() {
+        let directory = tempfile::tempdir().unwrap();
+        let (pool, durable) = DurableDatabase::open(directory.path()).await.unwrap();
+        let input: CreateProposal = serde_json::from_value(json!({
+            "title":"Restarted receipt", "freelancerName":"Fern Studio",
+            "freelancerEmail":"hello@fern.test", "clientName":"Aster Client",
+            "clientEmail":"aster@example.test", "message":"Scope below", "currency":"USD",
+            "items":[{"label":"Discovery","description":"Workshop","quantity":1,"unitAmountCents":50000}]
+        }))
+        .unwrap();
+        db::insert_proposal(
+            &pool,
+            "CDR-RESTART",
+            "private-token",
+            "client-hash",
+            "manage-hash",
+            &input,
+        )
+        .await
+        .unwrap();
+        durable.checkpoint(&pool).await.unwrap();
+        pool.close().await;
+
+        let (restored_pool, _) = DurableDatabase::open(directory.path()).await.unwrap();
+        let restored = db::by_client(&restored_pool, "client-hash").await.unwrap();
+        assert_eq!(restored.id, "CDR-RESTART");
+        assert_eq!(restored.title, "Restarted receipt");
     }
 }
