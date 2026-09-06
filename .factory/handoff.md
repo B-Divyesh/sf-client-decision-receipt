@@ -92,3 +92,22 @@ snapshot live under `/data`; keep the deployment at one replica.
 docker build --build-arg BUILD_SHA=<source-commit> -t client-decision-receipt .
 docker run --rm -p 8080:8080 -v cdr-data:/data client-decision-receipt
 ```
+
+## Independent verification 2 — FAIL (2026-09-06)
+
+Verifier report: [`.factory/verification-2.md`](verification-2.md).
+
+Implementation reviewed: `5b0d32bc54c83b9bf3be26ce12f46e4788e2c4aa`.
+Documentation commit: `524d163cf402aeeb4bedf78722e8d7d94dc3fab9` (the only
+change after the implementation is this handoff file). The clean build, full
+test suite, each declared claim command, live demo, private-link persistence,
+concurrent-decision recovery, rate limit, mobile/keyboard/accessibility, and
+legal/404 checks passed.
+
+The independent verdict is **FAIL** with two findings: the required two-party
+email receipt is not delivered with the deployed `PORT`-only runtime (both
+delivery rows say `sender_not_configured`), and public promises for free CSV
+export and configured two-recipient delivery have no matching declared
+demo-sandbox claim tests. Configure SMTP and add those claim tests before a
+PASS can be issued. Billing remains visibly unavailable and is not represented
+as a working checkout.
