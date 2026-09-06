@@ -47,7 +47,6 @@ pub struct AppState {
 /// On boot, the snapshot is restored before the app accepts traffic.
 struct DurableDatabase {
     snapshot: PathBuf,
-    transfer: PathBuf,
     staged: PathBuf,
     lock: Mutex<()>,
 }
@@ -62,7 +61,6 @@ impl DurableDatabase {
         }
         let durable = Arc::new(Self {
             snapshot,
-            transfer: data_dir.join("receipts-durable.next.sqlite"),
             staged: std::env::temp_dir().join(format!("{unique}.snapshot.sqlite")),
             lock: Mutex::new(()),
         });
@@ -79,8 +77,10 @@ impl DurableDatabase {
         sqlx::raw_sql(&format!("VACUUM INTO '{target}'"))
             .execute(pool)
             .await?;
-        fs::copy(&self.staged, &self.transfer).await?;
-        fs::rename(&self.transfer, &self.snapshot).await?;
+        // Azure Files does not permit the POSIX rename primitive from this
+        // container mount. Copying a fully-materialized local SQLite backup
+        // directly is safe with the deployment's enforced one-writer limit.
+        fs::copy(&self.staged, &self.snapshot).await?;
         let _ = fs::remove_file(&self.staged).await;
         Ok(())
     }
