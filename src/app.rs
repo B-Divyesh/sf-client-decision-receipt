@@ -25,7 +25,7 @@ use std::{
     path::{Path as FilePath, PathBuf},
     sync::Arc,
 };
-use tokio::{fs, net::TcpListener, sync::Mutex};
+use tokio::{fs, io::AsyncWriteExt, net::TcpListener, sync::Mutex};
 use tower_governor::{
     governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
 };
@@ -57,7 +57,7 @@ impl DurableDatabase {
         let working = std::env::temp_dir().join(format!("{unique}.sqlite"));
         let snapshot = data_dir.join("receipts-durable.sqlite");
         if fs::try_exists(&snapshot).await? {
-            fs::copy(&snapshot, &working).await?;
+            copy_bytes(&snapshot, &working).await?;
         }
         let durable = Arc::new(Self {
             snapshot,
@@ -80,10 +80,19 @@ impl DurableDatabase {
         // Azure Files does not permit the POSIX rename primitive from this
         // container mount. Copying a fully-materialized local SQLite backup
         // directly is safe with the deployment's enforced one-writer limit.
-        fs::copy(&self.staged, &self.snapshot).await?;
+        copy_bytes(&self.staged, &self.snapshot).await?;
         let _ = fs::remove_file(&self.staged).await;
         Ok(())
     }
+}
+
+async fn copy_bytes(source: &FilePath, destination: &FilePath) -> anyhow::Result<()> {
+    let mut input = fs::File::open(source).await?;
+    let mut output = fs::File::create(destination).await?;
+    tokio::io::copy(&mut input, &mut output).await?;
+    output.flush().await?;
+    output.sync_all().await?;
+    Ok(())
 }
 
 pub async fn run() -> anyhow::Result<()> {
