@@ -52,40 +52,62 @@ pub async fn run() -> anyhow::Result<()> {
     fs::create_dir_all(&data_dir).await?;
     let (secret, secret_source) = load_secret(&data_dir).await?;
     let configured_database = std::env::var("DATABASE_URL").ok();
-    let (db_url, database_file, marker_exists) = if let Some(url) = configured_database.as_ref() {
+    let (db_url, database_file, marker_is_verified) = if let Some(url) =
+        configured_database.as_ref()
+    {
         (url.clone(), "supplied DATABASE_URL".to_string(), true)
     } else {
         let marker = data_dir.join("database-path");
-        let filename = fs::read_to_string(&marker)
+        let marker_value = fs::read_to_string(&marker)
             .await
             .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty() && !value.contains('/') && !value.contains('\\'))
-            .unwrap_or_else(|| "receipts.sqlite".into());
+            .map(|value| value.trim().to_string());
+        // Marker files written by current versions use `ready:`. A legacy
+        // filename can exist after an interrupted first boot, because earlier
+        // versions wrote the marker before SQLite had opened successfully.
+        let (filename, verified) = marker_value
+            .as_deref()
+            .and_then(|value| value.strip_prefix("ready:"))
+            .map(|value| (value.to_string(), true))
+            .or_else(|| marker_value.map(|value| (value, false)))
+            .filter(|(value, _)| !value.is_empty() && !value.contains('/') && !value.contains('\\'))
+            .unwrap_or_else(|| ("receipts.sqlite".into(), false));
         (
             format!("sqlite://{}", data_dir.join(&filename).display()),
             filename,
-            marker.exists(),
+            verified,
         )
     };
     let (pool, database_source) = match db::connect(&db_url).await {
         Ok(pool) => {
-            if configured_database.is_none() && !marker_exists {
-                fs::write(data_dir.join("database-path"), &database_file).await?;
+            if configured_database.is_none() && !marker_is_verified {
+                fs::write(
+                    data_dir.join("database-path"),
+                    format!("ready:{database_file}"),
+                )
+                .await?;
             }
             (pool, "persisted")
         }
         Err(error)
-            if configured_database.is_none() && !marker_exists && database_locked(&error) =>
+            if configured_database.is_none() && !marker_is_verified && database_locked(&error) =>
         {
-            // A failed revision can leave a temporary Azure Files lock on the
-            // first database filename. Preserve that file untouched and pin a
-            // fresh durable filename for this otherwise empty first boot.
-            let recovery_file = "receipts-v2.sqlite";
-            tracing::warn!("initial database file is locked; using a new durable file");
-            fs::write(data_dir.join("database-path"), recovery_file).await?;
+            // A failed revision can leave a temporary Azure Files lock on an
+            // initial filename. This branch is only available before a
+            // successful database choice is marked ready, so it never moves
+            // an established tenant to a different database.
+            let recovery_file = "receipts-v3.sqlite";
+            tracing::warn!(
+                "unverified initial database file is locked; trying a fresh durable file"
+            );
             let recovery_url = format!("sqlite://{}", data_dir.join(recovery_file).display());
-            (db::connect(&recovery_url).await?, "recovered")
+            let recovery_pool = db::connect(&recovery_url).await?;
+            fs::write(
+                data_dir.join("database-path"),
+                format!("ready:{recovery_file}"),
+            )
+            .await?;
+            (recovery_pool, "recovered")
         }
         Err(error) => return Err(error),
     };
