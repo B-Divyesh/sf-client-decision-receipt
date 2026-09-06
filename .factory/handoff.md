@@ -1,72 +1,94 @@
 # Handoff — Client Decision Receipt
 
-## Independent verification outcome (2026-08-28): **FAIL**
+## Release status
 
-Candidate `75019d3cb52948843ff2f2db890cf01a2c13342b` was independently checked
-against https://client-decision-receipt.sociobot.in from a clean checkout. Do
-not release or promote it. The detailed evidence is in
-[`verification.md`](verification.md).
+Implementation commit: `5b0d32bc54c8d8a60d2bd632d8c6d383eaceca55`.
 
-- **P0:** live capability links alternate between `404` and `200` on repeated
-  requests to the same token, proving per-instance database/HMAC-secret state
-  behind the load balancer.
-- **P1:** `.factory/claims.json` is missing; mandatory claim tests could not be
-  run. The home page has no one-click sample-data demo, a separately mandated
-  FAIL condition.
-- **P1:** default factory runtime has no configured SMTP, so the brief-required
-  two-party emails remain `queued`; concurrent final decisions return `500` for
-  the losing request instead of `409`.
+Client Decision Receipt gives freelancers and small studios a private link for
+an explicit accept, changes request, or decline. It freezes the shown scope in
+a dated SHA-256 receipt. The first action is **Try it with sample data**.
 
-The prior builder verification below is retained as implementation context, but
-it is superseded by this release decision and does not cover the live
-multi-instance persistence failure.
+The final image is live at `https://client-decision-receipt.sociobot.in` on
+one healthy replica with the `/data` Azure Files mount. Its `/health` endpoint
+returns implementation SHA `5b0d32bc54c83b9bf3be26ce12f46e4788e2c4aa`.
 
-## Shipped
+## What changed
 
-- Rust/Axum service with SQLite persistence, structured logs, graceful shutdown, `/health` build identity, secure headers, compression, and static frontend serving on `PORT` (default 8080).
-- Account-free proposal creation with independent 192-bit client and management capabilities; lookup values are HMAC-protected by a CSPRNG secret generated and persisted at first boot.
-- Explicit Accept / Request changes / Decline workflow. The first response wins transactionally; proposal metadata, exact line items, party details, response, and UTC timestamps are canonicalized into an immutable SHA-256 receipt seal.
-- Management view with status, client-link recovery, delivery status, print/PDF, JSON and CSV exports, and confirmed deletion. Deletion preserves only the anonymous hash/catalogue/date tombstone.
-- Durable receipt messages for both supplied email addresses. With optional STARTTLS SMTP configuration they send asynchronously and retry queued work on restart; without SMTP they remain visibly queued rather than being lost or claimed as sent.
-- Free core plus the Sociobot `$29` one-time Pro contract: hosted checkout, URL-token capture and stripping, local storage, daily verification cache, optimistic offline behavior, revoked-license notice, paste-to-restore, archive-index export, and priority support. Core exports, deletion, and accessibility remain free.
-- Original botanical field-guide system, responsive 390 px treatment, dark theme, reduced-motion fallback, empty/loading/error/offline states, keyboard-native forms, legal pages, and offline shell.
-- Original factory-generated herbarium illustration with prompt/model provenance. Runtime WebP sources are 22 KB (640 px) and 53 KB (960 px).
+- Added `/demo`: realistic Fern Studio sample data in a separate 24-hour
+  workspace, persistent **Demo — sample data, nothing is saved** label, reset,
+  and start-for-real actions. Demo data never uses proposal or mail records.
+- Added `.factory/claims.json` with outcome browser tests for demo isolation,
+  frozen receipts, no tracking, offline reload, and the free core.
+- Made private-link state durable. The service is pinned to one replica. Azure
+  Files byte-range locks do not support a live SQLite file, so the app restores
+  local SQLite from `/data/receipts-durable.sqlite` and writes a fully
+  checkpointed SQLite snapshot to `/data` after every real-data write. A
+  restart regression test proves a private link survives this handoff.
+- Losing simultaneous decisions return `409`; an integration test asserts one
+  `201` and one `409`.
+- All APIs are rate limited. The final deployment fixes `Retry-After` to one
+  usable second for both read and write limits.
+- Added designed 404 behaviour, titles, skip-link focus, service-worker update
+  action, sitemap, social metadata, accessibility checks, copy audit, catalog
+  description, and generated-image provenance.
+- When no SMTP sender exists, delivery says `sender_not_configured` instead of
+  pretending an email has been queued for sending.
+- Kept the public $29 one-time Independent Pro offer and restore path. The
+  live Sociobot checkout returned 404, so checkout is visibly unavailable
+  rather than a dead purchase button. Billing metadata is at
+  `/work/.evidence/billing-offer.json`.
 
-## Run and deploy
+## Verification
+
+From a clean checkout:
 
 ```bash
 npm ci
 npm test
+npm run test:claims
 npm run build
-DATA_DIR=./data cargo run
+cargo clippy --all-targets -- -D warnings
+cargo build --release --locked
 ```
 
-Container build: `docker build --build-arg BUILD_SHA=<source-commit> -t client-decision-receipt .`
+Completed during this repair:
 
-No runtime variable is required. The image defaults to port 8080 and creates `/data/receipts.sqlite` plus `/data/instance-secret`; mount `/data` persistently. See `README.md` for optional SMTP variables.
+- `npm test` passed: Vitest, 7 Rust tests, and 8 Playwright tests.
+- Every documented claim command passed from the demo sandbox.
+- `cargo clippy --all-targets -- -D warnings`, `cargo fmt --check`,
+  `npm run build`, and zero-config runtime `/health` passed.
+- Built frontend: JavaScript 78.81 KB (28.60 KB gzip), CSS 16.92 KB
+  (4.69 KB gzip).
+- Playwright axe checks found no serious or critical violations on home or
+  demo; mobile width had no overflow.
+- Live on `0c4efc9`: health returned the exact build SHA; eight repeated reads
+  of one private link all returned 200; concurrent decisions returned 201 and
+  409; the management receipt returned 200 and was then deleted. Fresh desktop
+  and phone contexts showed the job headline, audience, and sample action
+  before scrolling. The phone demo showed the sample, persistent label, and
+  reset with no console errors.
+- `verify-url.sh` passed against the live page: title, language, h1, main,
+  alt checks, and no console errors.
+- Final live `5b0d32b` check: one healthy, active replica; `/health` returned
+  its exact build SHA; the read allowance returned 429 with `Retry-After: 1`.
 
-## Verification performed
+## Known external dependencies
 
-- `npm audit --audit-level=high`: **0 vulnerabilities**.
-- `npm test`: **passed** — 2 Vitest assertions, 3 Rust tests, and 2 Playwright journeys. The browser test runs at 390×844, creates a proposal, records the decision, checks the seal, exports JSON, deletes the record, and asserts no console errors.
-- Playwright + axe-core on the decided receipt: **0 serious or critical violations**.
-- `cargo clippy --all-targets -- -D warnings`: passed after formatting.
-- `npm run build`: passed; output is exactly `dist/`. Initial JS 71.87 KB / 26.98 KB gzip; CSS 15.71 KB / 4.44 KB gzip.
-- Lighthouse mobile: **Performance 98, Accessibility 100, Best Practices 100, SEO 100**. LCP 1.5 s, CLS 0, total blocking time 140 ms.
-- `cargo build --release --locked`: passed.
-- Zero-config runtime smoke: release binary launched with a cleared environment plus `PORT`; `/health` returned `{status: ok, buildSha: dev}`.
-- Load smoke: 100 concurrent `/health` requests completed in 163 ms with 100/100 HTTP 200 responses. API burst test separately verifies HTTP 429 and `Retry-After`; health is intentionally exempt.
-- Manual review at 390×844: no horizontal page overflow and all controls remain at least 44 px.
-- Asset review: coherent fern, blank tag, correct palette, no malformed text, brand, watermark, people, or misleading interface.
+- The factory supplies only `PORT`. No SMTP sender credentials were available
+  in product scope, so the required two-party emails cannot be sent by default.
+  Configure a trusted STARTTLS sender with the documented SMTP variables, then
+  perform an inbox/deliverability check. Until then, the UI honestly reports
+  `sender not configured`.
+- Sociobot billing registration is still required. On 2026-09-06 the checkout
+  URL returned 404. The free core is unaffected; do not enable purchase until
+  the billing operator registers the stated offer.
 
-## Known deployment notes
+## Operations
 
-- This build host has no Docker daemon, so the Dockerfile could not be executed here. The equivalent locked release build and zero-environment runtime were verified directly. The Dockerfile is multi-stage, does not use `.git`, runs as UID 10001, and copies only the release binary and `dist/` into Debian slim.
-- Factory deployment supplies only `PORT`, so receipt copies remain in the durable queue until an SMTP relay is configured. The browser receipt and exports work fully without mail. This is the closest honest no-third-party implementation; configure the optional SMTP variables for automatic delivery.
-- The factory must register the paid product and confirm its production price/return URL. No product ID or provider secret is hardcoded.
+No variable other than `PORT` is required. The durable secret and SQLite
+snapshot live under `/data`; keep the deployment at one replica.
 
-## Suggested next steps
-
-1. Configure a trusted STARTTLS SMTP relay and perform a live inbox/deliverability check.
-2. Run the factory container build and persistence-volume smoke in CI.
-3. Register the Sociobot product, then test purchase, restore, refund, and revoked-license paths in staging.
+```bash
+docker build --build-arg BUILD_SHA=<source-commit> -t client-decision-receipt .
+docker run --rm -p 8080:8080 -v cdr-data:/data client-decision-receipt
+```
